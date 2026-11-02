@@ -1,0 +1,3 @@
+ 'use client';
+import {useState} from 'react';
+export default function Login(){const [error,setError]=useState('');return <main><h1>K-Crown 登入</h1><p>僅限已由管理員建立的 Supabase 帳號。</p><form onSubmit={async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const r=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(f))});if(r.ok)location.href='/';else setError('登入失敗，請確認帳號密碼');}}><input name="email" type="email" placeholder="Email" required/><input name="password" type="password" placeholder="密碼" required/><button>登入</button><p role="alert">{error}</p></form></main>}
