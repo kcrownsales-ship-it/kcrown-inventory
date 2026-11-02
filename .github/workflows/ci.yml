@@ -1,0 +1,51 @@
+name: Inventory validation
+on:
+  pull_request:
+  push:
+    branches: [main, feat/airsoft-inventory-mvp]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: kcrown_demo
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd 'pg_isready -U postgres'
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      APP_MODE: demo
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/kcrown_demo
+      DIRECT_URL: postgresql://postgres@127.0.0.1:5432/kcrown_demo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm test
+      - run: npm run db:deploy
+      - name: Create local anonymous role for permission test
+        run: psql "$DATABASE_URL" -c 'CREATE ROLE anon NOLOGIN;'
+      - run: npm run test:db
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npx playwright install --with-deps chromium
+      - name: Browser and API tests
+        run: |
+          npm start > /tmp/kcrown-next.log 2>&1 &
+          trap 'kill $!' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000/ > /dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:e2e
+        env:
+          CHROMIUM_PATH: ""

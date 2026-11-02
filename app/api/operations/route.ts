@@ -1,8 +1,8 @@
 import { sameOrigin } from "@/lib/origin";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { authorized } from "@/lib/auth";
-import { mutate } from "@/lib/store";
+import { currentActor } from "@/lib/auth";
+import { mutate, demo } from "@/lib/store";
 const schema = z.object({
   requestId: z.string().uuid(),
   kind: z.enum(["receive", "order", "ship", "product"]),
@@ -27,11 +27,16 @@ const schema = z.object({
 export async function POST(req: NextRequest) {
   if (!sameOrigin(req))
     return NextResponse.json({ error: "Invalid origin" }, { status: 403 });
-  if (!(await authorized()))
-    return NextResponse.json({ error: "請先登入" }, { status: 401 });
+  const actor = await currentActor();
+  if (!actor) return NextResponse.json({ error: "請先登入" }, { status: 401 });
   try {
     const input = schema.parse(await req.json());
-    await mutate(input);
+    if (demo)
+      return NextResponse.json(
+        { error: "Demo 資料只保存於瀏覽器，不接受伺服器寫入" },
+        { status: 409 },
+      );
+    await mutate(input, actor.id);
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json(

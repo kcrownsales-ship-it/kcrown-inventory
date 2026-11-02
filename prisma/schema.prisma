@@ -6,6 +6,7 @@ generator client {
 datasource db {
  provider = "postgresql"
  url = env("DATABASE_URL")
+ directUrl = env("DIRECT_URL")
 }
 // Atomic aggregate with PostgreSQL transaction locking. Demo never connects here.
 model InventoryState {

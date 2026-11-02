@@ -1,14 +1,29 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { summary, type State } from "@/lib/inventory";
+import { summary, apply, type Operation, type State } from "@/lib/inventory";
 export default function Workspace({
-  state: s,
+  state: initial,
   demo,
 }: {
   state: State;
   demo: boolean;
 }) {
+  const [s, setState] = useState(initial);
+  const [ready, setReady] = useState(!demo);
+  useEffect(() => {
+    if (!demo) {
+      setState(initial);
+      return;
+    }
+    try {
+      const saved = localStorage.getItem("kcrown-demo-v2");
+      if (saved) setState(JSON.parse(saved));
+    } catch {
+      setMessage("無法載入瀏覽器示範資料，已顯示初始資料。");
+    }
+    setReady(true);
+  }, [demo, initial]);
   const [tab, setTab] = useState("庫存總覽"),
     [search, setSearch] = useState(""),
     [message, setMessage] = useState(""),
@@ -41,16 +56,26 @@ export default function Workspace({
               },
             }
           : { ...data, kind, quantity: Number(data.quantity) };
-      const res = await fetch("/api/operations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...body, requestId: crypto.randomUUID() }),
-      });
-      const result = await res.json();
-      if (!res.ok) throw Error(result.error);
+      const operation = {
+        ...body,
+        requestId: crypto.randomUUID(),
+      } as Operation;
+      if (demo) {
+        const next = apply(s, operation);
+        localStorage.setItem("kcrown-demo-v2", JSON.stringify(next));
+        setState(next);
+      } else {
+        const res = await fetch("/api/operations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(operation),
+        });
+        const result = await res.json();
+        if (!res.ok) throw Error(result.error);
+        router.refresh();
+      }
       setMessage("已完成並儲存");
       form.reset();
-      router.refresh();
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "操作失敗");
     } finally {
@@ -110,11 +135,39 @@ export default function Workspace({
             <h1>{tab}</h1>
             <p>掌握每一筆庫存，讓每一次交付更有把握。</p>
           </div>
-          <span className="badge">{demo ? "DEMO · 示範環境" : "正式環境"}</span>
+          <div>
+            <span className="badge">
+              {demo ? "DEMO · 示範環境" : "私人工作區"}
+            </span>
+            {!demo && (
+              <button
+                className="reset"
+                onClick={async () => {
+                  const r = await fetch("/api/logout", { method: "POST" });
+                  if (r.ok) location.href = "/login";
+                  else setMessage("登出失敗，請重試");
+                }}
+              >
+                登出
+              </button>
+            )}
+          </div>
         </header>
         {demo && (
           <div className="notice">
-            示範資料獨立儲存，不連接正式客戶或庫存。顏色為示範選項，待正式規格確認。
+            示範資料僅保存在這個瀏覽器，不與其他使用者共用，也不連接正式資料。顏色為示範選項。
+            <button
+              className="reset"
+              onClick={() => {
+                if (confirm("只重設本瀏覽器的示範資料？")) {
+                  localStorage.removeItem("kcrown-demo-v2");
+                  setState(initial);
+                  setMessage("示範資料已重設");
+                }
+              }}
+            >
+              重設示範資料
+            </button>
           </div>
         )}
         {tab === "庫存總覽" && (
@@ -197,31 +250,69 @@ export default function Workspace({
           </>
         )}
         {tab === "產品與 SKU" && (
-          <section className="panel">
-            <h2>新增獨立 SKU</h2>
-            <p>相同型號的不同材質、長短版、顏色須使用獨立 SKU。</p>
-            <form onSubmit={(e) => submit(e, "product")}>
-              {[
-                ["sku", "SKU"],
-                ["model", "產品型號"],
-                ["material", "材質"],
-                ["length", "長短版"],
-                ["color", "顏色"],
-                ["system", "相容系統"],
-              ].map(([n, l]) => (
-                <label key={n}>
-                  {l}
-                  <input name={n} maxLength={80} required />
+          <>
+            <section className="panel">
+              <h2>新增獨立 SKU</h2>
+              <p>相同型號的不同材質、長短版、顏色須使用獨立 SKU。</p>
+              <form onSubmit={(e) => submit(e, "product")}>
+                {[
+                  ["sku", "SKU"],
+                  ["model", "產品型號"],
+                  ["material", "材質"],
+                  ["length", "長短版"],
+                  ["color", "顏色"],
+                  ["system", "相容系統"],
+                ].map(([n, l]) => (
+                  <label key={n}>
+                    {l}
+                    <input name={n} maxLength={80} required />
+                  </label>
+                ))}
+                <label>
+                  容量 RDS
+                  <input name="capacity" type="number" min="1" required />
                 </label>
-              ))}
-              <label>
-                容量 RDS
-                <input name="capacity" type="number" min="1" required />
-              </label>
-              <button disabled={busy}>建立商品</button>
-            </form>
-          </section>
+                <button disabled={busy || !ready}>建立商品</button>
+              </form>
+            </section>
+            <section className="panel">
+              <h2>產品列表 · {s.products.length} SKUs</h2>
+              <div className="tablewrap">
+                <table>
+                  <thead>
+                    <tr>
+                      {[
+                        "SKU",
+                        "型號",
+                        "材質",
+                        "長短版",
+                        "顏色",
+                        "相容系統",
+                        "容量",
+                      ].map((x) => (
+                        <th key={x}>{x}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {s.products.map((p) => (
+                      <tr key={p.id}>
+                        <td>{p.sku}</td>
+                        <td>{p.model}</td>
+                        <td>{p.material}</td>
+                        <td>{p.length}</td>
+                        <td>{p.color}</td>
+                        <td>{p.system}</td>
+                        <td>{p.capacity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </>
         )}
+
         {tab === "採購入庫" && (
           <section className="panel">
             <h2>採購入庫</h2>
@@ -242,7 +333,7 @@ export default function Workspace({
                   required
                 />
               </label>
-              <button disabled={busy}>確認入庫</button>
+              <button disabled={busy || !ready}>確認入庫</button>
             </form>
           </section>
         )}
@@ -274,7 +365,7 @@ export default function Workspace({
                     required
                   />
                 </label>
-                <button disabled={busy}>建立並預留</button>
+                <button disabled={busy || !ready}>建立並預留</button>
               </form>
             </section>
             <section className="panel">
@@ -328,7 +419,7 @@ export default function Workspace({
                   出貨單號
                   <input name="reference" required maxLength={200} />
                 </label>
-                <button disabled={busy}>確認出貨並扣庫存</button>
+                <button disabled={busy || !ready}>確認出貨並扣庫存</button>
               </form>
             ) : (
               <p>目前沒有待出貨訂單。</p>

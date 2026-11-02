@@ -292,3 +292,13 @@ footer {
     padding: 16px;
   }
 }
+
+.reset {
+  margin-left: 12px;
+  border: 1px solid #d5c49d;
+  background: white;
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: #85652e;
+  cursor: pointer;
+}

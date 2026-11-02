@@ -6,7 +6,10 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:3000",
     headless: true,
     launchOptions: {
-      executablePath: process.env.CHROMIUM_PATH ?? "/usr/bin/chromium",
+      executablePath:
+        process.env.CHROMIUM_PATH === ""
+          ? undefined
+          : (process.env.CHROMIUM_PATH ?? "/usr/bin/chromium"),
       args: ["--no-sandbox"],
     },
   },

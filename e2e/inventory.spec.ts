@@ -82,3 +82,34 @@ test("API rejects foreign origin and invalid quantities", async ({
     ).status(),
   ).toBe(400);
 });
+
+test("Demo browser contexts do not share private sample operations", async ({
+  browser,
+}) => {
+  const a = await browser.newContext(),
+    b = await browser.newContext();
+  try {
+    const pa = await a.newPage();
+    await pa.goto("/");
+    await pa.evaluate(() =>
+      localStorage.setItem(
+        "kcrown-demo-v2",
+        JSON.stringify({
+          products: [],
+          stock: {},
+          orders: [],
+          movements: [],
+          requests: [],
+        }),
+      ),
+    );
+    await pa.reload();
+    await expect(pa.locator("tbody tr")).toHaveCount(0);
+    const pb = await b.newPage();
+    await pb.goto("/");
+    await expect(pb.locator("tbody tr")).toHaveCount(30);
+  } finally {
+    await a.close();
+    await b.close();
+  }
+});

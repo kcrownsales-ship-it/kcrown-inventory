@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { appMode } from "./lib/access";
 import { createServerClient } from "@supabase/ssr";
 export async function middleware(request: NextRequest) {
-  if ((process.env.APP_MODE ?? "demo") === "demo") return NextResponse.next();
+  if (appMode() === "demo") return NextResponse.next();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL,
     key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key)

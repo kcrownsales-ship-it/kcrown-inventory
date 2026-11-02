@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { approvedUser, appMode } from "./access";
 export async function authClient() {
   const jar = await cookies();
   return createServerClient(
@@ -19,9 +20,11 @@ export async function authClient() {
     },
   );
 }
-export async function authorized() {
-  if ((process.env.APP_MODE ?? "demo") === "demo") return true;
+export async function currentActor(): Promise<{ id: string } | null> {
+  if (appMode() === "demo") return { id: "demo" };
   const client = await authClient();
   const { data, error } = await client.auth.getUser();
-  return !error && !!data.user;
+  return !error && data.user && approvedUser(data.user.id)
+    ? { id: data.user.id }
+    : null;
 }
